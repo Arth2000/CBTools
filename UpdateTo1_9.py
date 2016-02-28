@@ -3,6 +3,8 @@
 MCEdit filter used to update Minecraft commands from 1.7 or 1.8 format to 1.9 format
 """
 
+import string
+
 from filterutils import *
 
 __author__ = u'Arth2000'
@@ -14,12 +16,51 @@ SAY_TO_TEXT = 1
 SAY_TO_TRANSLATE = 2
 
 
+class CommandPatternFormatter(string.Formatter):
+    """
+    >>> c = CommandPatternFormatter()
+    >>> c.format('summon-by {entity} {nbt} {sel}')
+    '^/?summon-by (?P<entity>\\\\S+) (?P<nbt>\\\\{.*\\\\}) (?P<sel>\\\\S+)$'
+
+    >>> c.format('try {nbt-1} {nbt-2} {block}')
+    '^/?try (?P<nbt-1>\\\\{.*\\\\}) (?P<nbt-2>\\\\{.*\\\\}) (?P<block>\\\\S+)$'
+
+    """
+
+    def vformat(self, format_string, args, kwargs):
+        return r'^/?' + super(CommandPatternFormatter, self).vformat(format_string, args, kwargs) + r'$'
+
+    DEFAULT_DICT = {
+        'pos': r'(?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){2}',
+        'x': r'(?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)',
+        'y': r'(?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)',
+        'z': r'(?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)',
+        'nbt': r'\{.*\}',
+        'json': r'.*',
+        'cmd': r'.*',
+        'line': r'.*',
+    }
+
+    def get_value(self, key, args, kwargs):
+        try:
+            super(CommandPatternFormatter, self).get_value(key=key, args=args, kwargs=kwargs)
+        except (IndexError, KeyError):
+            prefix = '(?P<' + key + '>'
+            for start, value in self.DEFAULT_DICT.iteritems():
+                if key.lower().startswith(start):
+                    return prefix + value + ')'
+
+            return prefix + r'\S+)'
+
+
 class Formatter(object):
     KEEP_ID_TAG = {u'ench', u'CustomPotionEffects', u'SkullOwner', u'Decorations', u'tag'}
 
     class_commands = []
 
     class_init = False
+
+    pattern_formatter = CommandPatternFormatter()
 
     # The table with the indices of the items
 
@@ -161,6 +202,9 @@ class Formatter(object):
             if not hasattr(self, u'formatter'):
                 self.formatter = formatter
 
+            if isinstance(self.pattern, basestring):
+                self.pattern = re.compile(Formatter.pattern_formatter.format(self.pattern))
+
         def format(self, cmd, **kwargs):
             """
             Try to format the given command
@@ -174,8 +218,6 @@ class Formatter(object):
             u'/summon ThisCommandDoesMatch ~ ~ ~'
 
             :param cmd: The command to format
-            :param nbt: The nbt of the tile entity
-            :param formatter: The Formatter instance to use if one is needed
             :return: The formatted command if it matches. None otherwise
             """
             match = self.pattern.match(cmd)
@@ -195,20 +237,32 @@ class Formatter(object):
         A decorator that defines that the following function is a command
 
         It adds the given command and the pattern to the list of known commands
+        It adds the given command and the pattern to the list of known commands
 
         >>> f = Formatter()
         >>> f.format_command(u'/summon-pos 666 42 ~-3 Zombie')
         u'/summon-pos 666 42 ~-3 Zombie'
-        >>> @f.inst_command(re.compile(r'^/?summon-pos(?P<pos>(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3}) (?P<entity>\S+)$'))
+        >>> @f.inst_command(re.compile(r'^/?summon-pos(?P<pos>(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3}) ' + \
+                    r'(?P<entity>\S+)$'))
         ... def summon_pos(**dic):
         ...     return u'/summon {entity}{pos}'.format(**dic)
         ...
         >>> f.format_command(u'/summon-pos 666 42 ~-3 Zombie')
         u'/summon Zombie 666 42 ~-3'
 
+        >>> @f.inst_command(u'foo-by {entity} {nbt} {sel}')
+        ... def summon_by(**dic):
+        ...     return u'/execute {sel} ~ ~ ~ /foo {entity} {nbt}'.format(**dic)
+        ...
+        >>> f.format_command(u'foo-by Zombie {Passengers:[{id:Pig}]} @a')
+        u'/execute @a ~ ~ ~ /foo Zombie {Passengers:[{id:Pig}]}'
+
         :param pattern: The pattern of the command
         :param commands: The list of commands this command should be added to
         """
+
+        if isinstance(pattern, basestring):
+            pattern = re.compile(cls.pattern_formatter.format(pattern))
 
         def _command(cmd):
             if cmd is None:
@@ -371,6 +425,19 @@ class Formatter(object):
         return _json
 
     @staticmethod
+    def __alias(pattern, string, dec):
+        @dec(pattern)
+        def formatter(**dic):
+            return dic[u'_formatter'].format_command(string.format(**dic))
+
+    @classmethod
+    def alias(cls, pattern, string):
+        cls.__alias(pattern, string, cls.command)
+
+    def inst_alias(self, pattern, string):
+        self.__alias(pattern, string, self.inst_command)
+
+    @staticmethod
     def __cmd_shortcut(modifier, dec, for_class=True):
         """
         Make a new command shortcut
@@ -397,7 +464,13 @@ class Formatter(object):
 
         """
 
-        def make_cmd(pattern, string):
+        def make_cmd(pattern, string=None):
+            if string is None:
+                if not isinstance(pattern, basestring):
+                    raise ValueError('String cannot be None when pattern is not a string.')
+
+                string = '/' + pattern
+
             @dec(pattern)
             @modifier
             def formatter(**kwargs):
@@ -429,83 +502,50 @@ class Formatter(object):
 
     @classmethod
     def __class_commands_init(cls):
-        execute_pat = re.compile(r'^(?P<execute>/?execute \S+(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3} )(?P<cmd>.+)$')
-
-        @cls.command(execute_pat)
+        @cls.command(ur'execute {sel} {pos} {cmd}')
         def execute_string(**dic):
-            return dic[u'execute'] + dic[u'_formatter'].format_command(dic[u'cmd'])
+            return u'/execute {} {} {}'.format(dic[u'sel'], dic[u'pos'], dic[u'_formatter'].format_command(dic[u'cmd']))
 
-        summon_pat = re.compile(
-            r'^/?summon (?P<entity>\S+) ?(?P<pos>(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3}) (?P<nbt>\{.*\})$')
-
-        @cls.command(summon_pat)
+        @cls.command(u'summon {entity} {pos} {nbt}')
         def summon_string(**dic):
             nbt, type = dic[u'_formatter'].format_compound(parse_compound(dic[u'nbt']), dic[u'entity'])
 
-            return u'/summon {}{} {}'.format(type or dic[u'entity'], dic[u'pos'], compound_string(nbt))
+            return u'/summon {} {} {}'.format(type or dic[u'entity'], dic[u'pos'], compound_string(nbt))
 
         # The selector commands
-        scoreboard_pat = re.compile(
-            r'^/?scoreboard players (?P<op>set|add|remove) (?P<sel>\S+) (?P<obj>\S+) (?P<val>\S+) (?P<nbt>\{.*\})$')
-        cls.selector_cmd(scoreboard_pat, u'/scoreboard players {op} {sel} {obj} {val} {nbt}')
+        cls.selector_cmd(u'scoreboard players {op} {sel} {obj} {val} {nbt}')
 
-        testfor_pat = re.compile(r'^/?testfor (?P<sel>\S+)(?: (?P<nbt>\{.*\}))$')
-        cls.selector_cmd(testfor_pat, u'/testfor {sel} {nbt}')
+        cls.selector_cmd(u'/testfor {sel} {nbt}')
 
-        entity_pat = re.compile(r'^/?entitydata (?P<sel>\S+) (?P<nbt>\{.*\})$')
-        cls.selector_cmd(entity_pat, u'/entitydata {sel} {nbt}')
+        cls.selector_cmd(u'/entitydata {sel} {nbt}')
 
         # Custom commands
-        summon_at_pat = re.compile(
-            r'^/?summon-at (?P<entity>\S+) (?P<nbt>\{.*\})(?P<pos>(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3})')
+        cls.alias(u'summon-at {entity} {nbt} {pos}', u'/summon {entity} {pos} {nbt}')
 
-        @cls.command(summon_at_pat)
-        def summon_at_string(**dic):
-            return dic[u'_formatter'].summon_string(**dic)
-
-        summon_if_at_pat = re.compile(
-            r'^/?summon-if-at (?P<entity>\S+) (?P<nbt>\{.*\}) (?P<sel>\S+)(?P<pos>(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3})$')
-
-        @cls.command(summon_if_at_pat)
-        def summon_if_at_string(**dic):
-            return u'/execute {} ~ ~ ~ {}'.format(dic[u'sel'], dic[u'_formatter'].summon_string(**dic))
+        cls.alias(u'summon-if-at {entity} {nbt} {sel} {pos}', u'/execute {sel} ~ ~ ~ /summon {entity} {pos} {nbt}')
 
         # The json commands
-        tellraw_pat = re.compile(r'^/?tellraw (?P<sel>\S+) (?P<json>.*)$')
-        cls.json_cmd(tellraw_pat, u'/tellraw {sel} {json}')
+        cls.json_cmd(u'/tellraw {sel} {json}')
 
-        title_pat = re.compile(r'^/?title (?P<sel>\S+) (?P<type>title|subtitle) (?P<json>.*)$')
-        cls.json_cmd(title_pat, u'/title {sel} {type} {json}')
+        cls.json_cmd(u'/title {sel} {type} {json}')
 
         # The nbt commands
-        give_pat = re.compile(r'^/?give (?P<sel>\S+) (?P<item>\S+) (?P<amount>\S+) (?P<data>\S+) (?P<nbt>\{.*\})$')
-        cls.nbt_cmd(give_pat, u'/give {sel} {item} {amount} {data} {nbt}')
+        cls.nbt_cmd(u'/give {sel} {item} {amount} {data} {nbt}')
 
-        setblock_pat = re.compile(
-            r'^/?setblock(?P<pos>(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3}) (?P<id>\S+) (?P<data>\S+) (?P<oldBlock>\S+)'
-            r' (?P<nbt>\{.*\})$')
-        cls.nbt_cmd(setblock_pat, u'/setblock{pos} {id} {data} {oldBlock} {nbt}')
+        cls.nbt_cmd(u'/setblock {pos} {id} {data} {oldBlock} {nbt}')
 
-        fill_pat = re.compile(
-            r'^/?fill(?P<pos1>(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3})(?P<pos2>(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~))'
-            r'{3}) (?P<id>\S+) (?P<data>\S+) (?P<oldBlock>\S+) (?P<nbt>\{.*\})$')
-        cls.nbt_cmd(fill_pat, u'/fill{pos1}{pos2} {id} {data} {oldBlock} {nbt}')
+        cls.nbt_cmd(u'/fill {pos1} {pos2} {id} {data} {oldBlock} {nbt}')
 
-        blockdata_pat = re.compile(r'^/?blockdata(?P<pos>(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3}) (?P<nbt>\{.*\})$')
-        cls.nbt_cmd(blockdata_pat, u'/blockdata{pos} {nbt}')
+        cls.nbt_cmd(u'/blockdata {pos} {nbt}')
 
         replaceitem_pat = re.compile(
             r'^/?replaceitem (?P<where>block((?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3})|entity \S+) (?P<slot>\S+) '
             r'(?P<item>\S+) (?P<amount>\S+) (?P<data>\S+) (?P<nbt>\{.*\})$')
         cls.nbt_cmd(replaceitem_pat, u'/replaceitem {where} {slot} {item} {amount} {data} {nbt}')
 
-        clear_pat = re.compile(r'^/?clear (?P<sel>\S+) (?P<item>\S+) (?P<data>\S+) (?P<maxCount>\S+) (?P<nbt>\{.*\})$')
-        cls.nbt_cmd(clear_pat, u'/clear {sel} {item} {data} {maxCount} {nbt}')
+        cls.nbt_cmd(u'/clear {sel} {item} {data} {maxCount} {nbt}')
 
-        testforblock_pat = re.compile(
-            r'^/?testforblock(?P<pos>(?: (?:~?-?(?:\d+(?:\.\d*)?|\.\d+)|~)){3}) (?P<id>\S+) (?P<data>\S+) '
-            r'(?P<nbt>\{.*\})$')
-        cls.nbt_cmd(testforblock_pat, u'/testforblock{pos} {id} {data} {nbt}')
+        cls.nbt_cmd(u'/testforblock {pos} {id} {data} {nbt}')
 
     def __init__(self, say_to_tellraw=KEEP_SAY):
         if not self.class_init:
@@ -695,6 +735,9 @@ class Formatter(object):
 
         >>> f.format_command(u'/scoreboard players set @e[type=Zombie] test 1 {DropChances:[0F,0F,1F,2F,0.35F]}')
         u'/scoreboard players set @e[type=Zombie] test 1 {HandDropChances:[0F,0F],ArmorDropChances:[0F,1F,2F,0.35F]}'
+
+        >>> f.format_command(u'/summon-at Zombie {Riding:{id:Pig}} 666 42 ~-3')
+        u'/summon Pig 666 42 ~-3 {Passengers:[{id:Zombie}]}'
 
         :param cmd: The command
         :type cmd: unicode
