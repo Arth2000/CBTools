@@ -10,12 +10,20 @@ Current utilities:
     Some stringify commands for builtin nbt tags
 """
 import re
-
 try:
-    from pymclevel.nbt import TAG_Compound, TAG_List
+    from pymclevel.nbt import TAG_BYTE, TAG_SHORT, TAG_INT, TAG_LONG, TAG_FLOAT, TAG_DOUBLE, TAG_STRING, \
+        TAG_Compound, TAG_List
 except ImportError:
+    TAG_BYTE = 1
+    TAG_SHORT = 2
+    TAG_INT = 3
+    TAG_LONG = 4
+    TAG_FLOAT = 5
+    TAG_DOUBLE = 6
+    TAG_STRING = 8
     TAG_Compound = dict
     TAG_List = list
+
 
 __author__ = u'Arth2000'
 
@@ -23,28 +31,160 @@ WHOLE_WORLD_OPTION = u'On'
 WHOLE_WORLD = u'Whole World'
 BOX = u'Box'
 
+ITEMS_TABLE = {0: u'air', 1: u'stone', 2: u'grass', 3: u'dirt', 4: u'cobblestone', 5: u'planks', 6: u'sapling',
+               7: u'bedrock',
+               8: u'flowing_water', 9: u'water', 10: u'flowing_lava', 11: u'lava', 12: u'sand', 13: u'gravel',
+               14: u'gold_ore',
+               15: u'iron_ore', 16: u'coal_ore', 17: u'log', 18: u'leaves', 19: u'sponge', 20: u'glass',
+               21: u'lapis_ore',
+               22: u'lapis_block', 23: u'dispenser', 24: u'sandstone', 25: u'noteblock', 26: u'bed',
+               27: u'golden_rail',
+               28: u'detector_rail', 29: u'sticky_piston', 30: u'web', 31: u'tallgrass', 32: u'deadbush',
+               33: u'piston',
+               34: u'piston_head', 35: u'wool', 37: u'yellow_flower', 38: u'red_flower', 39: u'brown_mushroom',
+               40: u'red_mushroom', 41: u'gold_block', 42: u'iron_block', 43: u'double_stone_slab',
+               44: u'stone_slab',
+               45: u'brick_block', 46: u'tnt', 47: u'bookshelf', 48: u'mossy_cobblestone', 49: u'obsidian',
+               50: u'torch',
+               51: u'fire', 52: u'mob_spawner', 53: u'oak_stairs', 54: u'chest', 55: u'redstone_wire',
+               56: u'diamond_ore',
+               57: u'diamond_block', 58: u'crafting_table', 59: u'wheat', 60: u'farmland', 61: u'furnace',
+               62: u'lit_furnace',
+               63: u'standing_sign', 64: u'wooden_door', 65: u'ladder', 66: u'rail', 67: u'stone_stairs',
+               68: u'wall_sign',
+               69: u'lever', 70: u'stone_pressure_plate', 71: u'iron_door', 72: u'wooden_pressure_plate',
+               73: u'redstone_ore', 74: u'lit_redstone_ore', 75: u'unlit_redstone_torch', 76: u'redstone_torch',
+               77: u'stone_button', 78: u'snow_layer', 79: u'ice', 80: u'snow', 81: u'cactus', 82: u'clay',
+               83: u'reeds',
+               84: u'jukebox', 85: u'fence', 86: u'pumpkin', 87: u'netherrack', 88: u'soul_sand', 89: u'glowstone',
+               90: u'portal', 91: u'lit_pumpkin', 92: u'cake', 93: u'unpowered_repeater', 94: u'powered_repeater',
+               95: u'stained_glass', 96: u'trapdoor', 97: u'monster_egg', 98: u'stonebrick',
+               99: u'brown_mushroom_block',
+               100: u'red_mushroom_block', 101: u'iron_bars', 102: u'glass_pane', 103: u'melon_block',
+               104: u'pumpkin_stem',
+               105: u'melon_stem', 106: u'vine', 107: u'fence_gate', 108: u'brick_stairs',
+               109: u'stone_brick_stairs',
+               110: u'mycelium', 111: u'waterlily', 112: u'nether_brick', 113: u'nether_brick_fence',
+               114: u'nether_brick_stairs', 115: u'nether_wart', 116: u'enchanting_table', 117: u'brewing_stand',
+               118: u'cauldron', 119: u'end_portal', 120: u'end_portal_frame', 121: u'end_stone',
+               122: u'dragon_egg',
+               123: u'redstone_lamp', 124: u'lit_redstone_lamp', 125: u'double_wooden_slab', 126: u'wooden_slab',
+               127: u'cocoa', 128: u'sandstone_stairs', 129: u'emerald_ore', 130: u'ender_chest',
+               131: u'tripwire_hook',
+               132: u'tripwire_hook', 133: u'emerald_block', 134: u'spruce_stairs', 135: u'birch_stairs',
+               136: u'jungle_stairs', 137: u'command_block', 138: u'beacon', 139: u'cobblestone_wall',
+               140: u'flower_pot',
+               141: u'carrots', 142: u'potatoes', 143: u'wooden_button', 144: u'skull', 145: u'anvil',
+               146: u'trapped_chest',
+               147: u'light_weighted_pressure_plate', 148: u'heavy_weighted_pressure_plate',
+               149: u'unpowered_comparator',
+               150: u'powered_comparator', 151: u'daylight_detector', 152: u'redstone_block', 153: u'quartz_ore',
+               154: u'hopper', 155: u'quartz_block', 156: u'quartz_stairs', 157: u'activator_rail', 158: u'dropper',
+               159: u'stained_hardened_clay', 160: u'stained_glass_pane', 161: u'leaves2', 162: u'log2',
+               163: u'acacia_stairs', 164: u'dark_oak_stairs', 165: u'slime', 166: u'barrier',
+               167: u'iron_trapdoor',
+               168: u'prismarine', 169: u'sea_lantern', 170: u'hay_block', 171: u'carpet', 172: u'hardened_clay',
+               173: u'coal_block', 174: u'packed_ice', 175: u'double_plant', 176: u'standing_banner',
+               177: u'wall_banner',
+               178: u'daylight_detector_inverted', 179: u'red_sandstone', 180: u'red_sandstone_stairs',
+               181: u'stone_slab2',
+               182: u'double_stone_slab2', 183: u'spruce_fence_gate', 184: u'birch_fence_gate',
+               185: u'jungle_fence_gate',
+               186: u'dark_oak_fence_gate', 187: u'acacia_fence_gate', 188: u'spruce_fence', 189: u'birch_fence',
+               190: u'jungle_fence', 191: u'dark_oak_fence', 192: u'acacia_fence', 193: u'spruce_door',
+               194: u'birch_door',
+               195: u'jungle_door', 196: u'acacia_door', 197: u'dark_oak_door', 2256: u'record_13',
+               2257: u'record_cat',
+               2258: u'record_blocks', 2259: u'record_chirp', 2260: u'record_far', 2261: u'record_mall',
+               2262: u'record_mellohi', 2263: u'record_stal', 2264: u'record_strad', 2265: u'record_ward',
+               2266: u'record_11', 2267: u'record_wait', 256: u'iron_shovel', 257: u'iron_pickaxe',
+               258: u'iron_axe',
+               259: u'flint_and_steel', 260: u'apple', 261: u'bow', 262: u'arrow', 263: u'coal', 264: u'diamond',
+               265: u'iron_ingot', 266: u'gold_ingot', 267: u'iron_sword', 268: u'wooden_sword',
+               269: u'wooden_shovel',
+               270: u'wooden_pickaxe', 271: u'wooden_axe', 272: u'stone_sword', 273: u'stone_shovel',
+               274: u'stone_pickaxe',
+               275: u'stone_axe', 276: u'diamond_sword', 277: u'diamond_shovel', 278: u'diamond_pickaxe',
+               279: u'diamond_axe', 280: u'stick', 281: u'bowl', 282: u'mushroom_stew', 283: u'golden_sword',
+               284: u'golden_shovel', 285: u'golden_pickaxe', 286: u'golden_axe', 287: u'string', 288: u'feather',
+               289: u'gunpowder', 290: u'wooden_hoe', 291: u'stone_hoe', 292: u'iron_hoe', 293: u'diamond_hoe',
+               294: u'golden_hoe', 295: u'wheat_seeds', 296: u'wheat', 297: u'bread', 298: u'leather_helmet',
+               299: u'leather_chestplate', 300: u'leather_leggings', 301: u'leather_boots',
+               302: u'chainmail_helmet',
+               303: u'chainmail_chestplate', 304: u'chainmail_leggings', 305: u'chainmail_boots',
+               306: u'iron_helmet',
+               307: u'iron_chestplate', 308: u'iron_leggings', 309: u'iron_boots', 310: u'diamond_helmet',
+               311: u'diamond_chestplate', 312: u'diamond_leggings', 313: u'diamond_boots', 314: u'golden_helmet',
+               315: u'golden_chestplate', 316: u'golden_leggings', 317: u'golden_boots', 318: u'flint',
+               319: u'porkchop',
+               320: u'cooked_porkchop', 321: u'painting', 322: u'golden_apple', 323: u'sign', 324: u'wooden_door',
+               325: u'bucket', 326: u'water_bucket', 327: u'lava_bucket', 328: u'minecart', 329: u'saddle',
+               330: u'iron_door',
+               331: u'redstone', 332: u'snowball', 333: u'boat', 334: u'leather', 335: u'milk_bucket',
+               336: u'brick',
+               337: u'clay_ball', 338: u'reeds', 339: u'paper', 340: u'book', 341: u'slime_ball',
+               342: u'chest_minecart',
+               343: u'furnace_minecart', 344: u'egg', 345: u'compass', 346: u'fishing_rod', 347: u'clock',
+               348: u'glowstone_dust', 349: u'fish', 350: u'cooked_fish', 351: u'dye', 352: u'bone', 353: u'sugar',
+               354: u'cake', 355: u'bed', 356: u'repeater', 357: u'cookie', 358: u'filled_map', 359: u'shears',
+               360: u'melon',
+               361: u'pumpkin_seeds', 362: u'melon_seeds', 363: u'beef', 364: u'cooked_beef', 365: u'chicken',
+               366: u'cooked_chicken', 367: u'rotten_flesh', 368: u'ender_pearl', 369: u'blaze_rod',
+               370: u'ghast_tear',
+               371: u'gold_nugget', 372: u'nether_wart', 373: u'potion', 374: u'glass_bottle', 375: u'spider_eye',
+               376: u'fermented_spider_eye', 377: u'blaze_powder', 378: u'magma_cream', 379: u'brewing_stand',
+               380: u'cauldron', 381: u'ender_eye', 382: u'speckled_melon', 383: u'spawn_egg',
+               384: u'experience_bottle',
+               385: u'fire_charge', 386: u'writable_book', 387: u'written_book', 388: u'emerald',
+               389: u'item_frame',
+               390: u'flower_pot', 391: u'carrot', 392: u'potato', 393: u'baked_potato', 394: u'poisonous_potato',
+               395: u'map', 396: u'golden_carrot', 397: u'skull', 398: u'carrot_on_a_stick', 399: u'nether_star',
+               400: u'pumpkin_pie', 401: u'fireworks', 402: u'firework_charge', 403: u'enchanted_book',
+               404: u'comparator',
+               405: u'netherbrick', 406: u'quartz', 407: u'tnt_minecart', 408: u'hopper_minecart',
+               409: u'prismarine_shard',
+               410: u'prismarine_crystals', 411: u'rabbit', 412: u'cooked_rabbit', 413: u'rabbit_stew',
+               414: u'rabbit_foot',
+               415: u'rabbit_hide', 416: u'armor_stand', 417: u'iron_horse_armor', 418: u'golden_horse_armor',
+               419: u'diamond_horse_armor', 420: u'lead', 421: u'name_tag', 422: u'command_block_minecart',
+               423: u'mutton',
+               424: u'cooked_mutton', 425: u'banner', 427: u'spruce_door', 428: u'birch_door', 429: u'jungle_door',
+               430: u'acacia_door', 431: u'dark_oak_door'}
+
 # Parsing functions
 SEL_PAT = re.compile(r'^@[apre](\[.*\])?$')
 IMPLICIT_KEYS = [u'x', u'y', u'z', u'r']
 
+TILE_ENTITIES = 0b01
+TILE_ENTITY = TILE_ENTITIES
+ENTITIES = 0b10
+ENTITY = ENTITIES
+TILE_AND_ENTITIES = 0b11
 
-def iter_tile_entities(predicate, whole_world_option=WHOLE_WORLD_OPTION, whole_world_name=WHOLE_WORLD):
+objects = {
+    TILE_ENTITIES: 'getTileEntitiesInBox',
+    ENTITIES: 'getEntitiesInBox'
+}
+
+
+def iter_on(predicate, what=TILE_AND_ENTITIES, whole_world_option=WHOLE_WORLD_OPTION, whole_world_=WHOLE_WORLD):
     """
-    Iterate over the tile entities that satisfies the given predicate and yield them.
-    See UpdateTo1_9.py for an example
+    Iterate on the entities and/or tile entities in the box or the whole world
 
     Args:
-        predicate: A predicate that says when the tile entity should be use or not
-        whole_world_option (unicode): The option used to known if the box should be the whole world
-        whole_world_name (unicode): The value if it is on the whole world
+        predicate: A function that given the options returns True when the entity should be formatted, False otherwise
+        what: On what (Entities, TileEntities or both) this should iterate
+        whole_world_option: The name of the option used to know if the filter should be applied on the whole world
+        whole_world_: The value if it should be used on the whole world
 
+    Returns:
 
     """
 
-    def _iter_tile_entities(fun):
-        def __iter_tile_entities(level, box, options):
+    def _iter_on(fun):
+        def __iter_on(level, box, options):
             # Check if the box is actually the whole world
-            if options[whole_world_option] == whole_world_name:
+            if options[whole_world_option] == whole_world_:
                 box = level.bounds
 
             dirty_chunks = []
@@ -54,26 +194,25 @@ def iter_tile_entities(predicate, whole_world_option=WHOLE_WORLD_OPTION, whole_w
             # Generator that yields that tile entities
             def get_tile_entities():
                 for chunk in all_chunks:
-                    tile_entities = chunk.getTileEntitiesInBox(box)
                     dirty = False
+                    for key, name in objects.iteritems():
+                        if what & key:
+                            for entity in chunk.__getattribute__(name)(box):
+                                if predicate(entity):
+                                    yield entity, key
 
-                    for tile_entity in tile_entities:
-                        if predicate(tile_entity):
-                            yield tile_entity
-
-                            if not dirty:  # Stock the dirty chunks to not mark as dirty not dirty chunks
-                                dirty = True
-                                dirty_chunks.append(chunk)
+                                    if not dirty:  # Stock the dirty chunks to not mark as dirty not dirty chunks
+                                        dirty = True
+                                        dirty_chunks.append(chunk)
 
             fun(level, box, options, get_tile_entities)
 
             for chunk in dirty_chunks:
                 level.markDirtyChunk(*chunk.chunkPosition)
 
-        return __iter_tile_entities
+        return __iter_on
 
-    return _iter_tile_entities
-
+    return _iter_on
 
 def use_if(use):
     """
@@ -663,3 +802,84 @@ def json_string(json):
     :return: A string built using the give json
     """
     return value_string(json, fun=place_quotes)
+
+
+def suffix(suf):
+    return lambda v: v + suf
+
+
+NBT_SUFFIXES = {
+    TAG_BYTE: suffix(u'b'),
+    TAG_SHORT: suffix(u's'),
+    TAG_LONG: suffix(u'L'),
+    TAG_FLOAT: suffix(u'f'),
+    TAG_DOUBLE: suffix(u'd'),
+    TAG_STRING: lambda v: u'"' + v + u'"'
+}
+
+
+def nbt_string(tag):
+    """
+    Stringify the tag
+
+    Args:
+        tag: The tag to stringify
+
+    Returns: A string representing the tag in a format usable in commands
+
+    """
+    if isinstance(tag, TAG_Compound):
+        return tag_compound_string(tag)
+
+    elif isinstance(tag, TAG_List):
+        return tag_list_string(tag)
+
+    else:
+        return value_tag_string(tag)
+
+
+def tag_compound_string(tag):
+    """
+    Stringify a compound tag
+
+    Args:
+        tag (TAG_Compound): The tag to stringify
+
+    Returns (unicode): A string representing the tag in a format usable in commands
+
+    """
+    result = []
+    for key, value in tag.iteritems():
+        result.append(key + u':' + nbt_string(value))
+
+    return u'{' + u','.join(result) + u'}'
+
+
+def tag_list_string(tag):
+    """
+    Stringify a list tag
+
+    Args:
+        tag (TAG_List): The tag to stringify
+
+    Return (unicode): A string representing the tag in a format usable in commands
+
+    """
+    result = []
+    for value in tag:
+        result.append(nbt_string(value))
+
+    return u'[' + u','.join(result) + u']'
+
+
+def value_tag_string(tag):
+    """
+    Stringify a string tag
+
+    Args:
+        tag: The tag to stringify
+
+    Returns (basestring): A string representing the tag in a format usable in commands
+
+    """
+    return NBT_SUFFIXES.get(tag.tagID, lambda v: v)(unicode(tag.value))
